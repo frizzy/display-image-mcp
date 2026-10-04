@@ -65,14 +65,91 @@ uv run display-image-mcp --transport streamable-http      # MCP at http://127.0.
 | `--transport` | `DISPLAY_MCP_TRANSPORT` | `stdio` |
 | `--mcp-host` / `--mcp-port` | `DISPLAY_MCP_MCP_HOST` / `_PORT` | `127.0.0.1` / `8765` |
 
-Example MCP client config (stdio):
+## Run as a standalone service
 
-```json
-{ "mcpServers": { "display-image": {
-    "command": "uv",
-    "args": ["--directory", "/path/to/display-image-mcp", "run", "display-image-mcp"],
-    "env": { "DISPLAY_MCP_BASE_URL": "http://192.168.1.10:8099" } } } }
+The server is meant to run on its own, independent of whichever agent uses it: the agent just connects to a URL and never starts or stops the process. Use the `streamable-http` transport and let your OS service manager own the lifecycle.
+
+Install it as a `uv` tool (no checkout needed):
+
+```sh
+uv tool install git+https://github.com/frizzy/display-image-mcp   # puts display-image-mcp in ~/.local/bin
+uv tool upgrade display-image-mcp                                 # later, to update
 ```
+
+Check it by hand first (replace the IP with this machine's LAN address):
+
+```sh
+display-image-mcp --transport streamable-http --mcp-host 0.0.0.0 \
+  --data-dir ~/display-images --base-url http://192.168.1.10:8099
+```
+
+- MCP endpoint: `http://192.168.1.10:8765/mcp`
+- Image host: `http://192.168.1.10:8099`
+
+`--mcp-host 0.0.0.0` lets an agent on another machine connect. The MCP endpoint is **unauthenticated** too, so keep both ports on a trusted network (or leave `--mcp-host` at its `127.0.0.1` default if the agent runs on the same machine).
+
+### Linux (systemd)
+
+`/etc/systemd/system/display-image-mcp.service`. Adjust `User` and the paths. `uv tool` installs into that user's `~/.local/bin`:
+
+```ini
+[Unit]
+Description=display-image-mcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+ExecStart=/home/pi/.local/bin/display-image-mcp --transport streamable-http --mcp-host 0.0.0.0
+Environment=DISPLAY_MCP_DATA=/home/pi/display-images
+Environment=DISPLAY_MCP_BASE_URL=http://192.168.1.10:8099
+# Environment=DISPLAY_MCP_PROFILES=/home/pi/display-profiles.toml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now display-image-mcp
+journalctl -u display-image-mcp -f
+```
+
+### macOS (launchd)
+
+`~/Library/LaunchAgents/com.example.display-image-mcp.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.example.display-image-mcp</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/you/.local/bin/display-image-mcp</string>
+    <string>--transport</string><string>streamable-http</string>
+    <string>--mcp-host</string><string>0.0.0.0</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>DISPLAY_MCP_DATA</key><string>/Users/you/display-images</string>
+    <key>DISPLAY_MCP_BASE_URL</key><string>http://192.168.1.10:8099</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/display-image-mcp.log</string>
+</dict></plist>
+```
+
+```sh
+launchctl load ~/Library/LaunchAgents/com.example.display-image-mcp.plist
+```
+
+The unit files above follow standard systemd and launchd usage. I have not run them myself: only the `uv tool install` command and the LAN-bound streamable-http endpoint were tested.
+
+### Connecting an agent
+
+Point any MCP client that supports streamable HTTP at the URL, e.g. `http://192.168.1.10:8765/mcp`. Check your client's docs for how it takes a remote server URL. If a client can only launch local stdio servers, you can still use `display-image-mcp` (no flags) as its command, but then that client owns the process lifecycle, which is what this setup avoids.
 
 ## Example: ESPHome e-paper
 
