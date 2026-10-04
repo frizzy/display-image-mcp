@@ -1,0 +1,29 @@
+[project]
+name = "display-image-mcp"
+version = "0.1.0"
+description = "MCP server that renders images for small displays (e-paper, LCD) and hosts them over HTTP, with per-display profiles"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.0",
+    "pillow>=10.1",
+    "uvicorn>=0.30",
+    "starlette>=0.40",
+]
+
+[project.scripts]
+display-image-mcp = "display_image_mcp.server:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/display_image_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
