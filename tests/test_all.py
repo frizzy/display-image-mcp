@@ -117,7 +117,7 @@ def test_custom_profiles_file(tmp_path):
 @pytest.mark.anyio
 async def test_mcp_tools_registered(svc):
     tools = {t.name for t in (await build_server(svc).list_tools())}
-    assert tools == {"list_profiles", "render_card", "render_image", "list_images", "delete_image"}
+    assert {"list_profiles", "render_card", "render_image", "list_images", "delete_image"} <= tools
 
 
 def test_bearer_auth(svc):
@@ -132,3 +132,103 @@ def test_bearer_auth(svc):
     assert c.get("/", headers={"Authorization": "Bearer wrong"}).status_code == 401
     assert c.get("/", headers={"Authorization": "Basic s3cret"}).status_code == 401
     assert c.get("/", headers={"Authorization": "Bearer s3cret"}).text == "hi"
+
+
+# -- layout ---------------------------------------------------------------------------
+
+from pathlib import Path  # noqa: E402
+import json  # noqa: E402
+
+EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.json"))
+
+
+def layout(svc, root, profile="waveshare-2in9-v2"):
+    p = svc.profile(profile)
+    return Renderer(p).render_layout(root)
+
+
+def text_cols(img):
+    g = img.convert("L")
+    return [x for x in range(g.width) if any(g.getpixel((x, y)) == 0 for y in range(g.height))]
+
+
+@pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.stem)
+def test_examples_render_without_warnings(svc, path):
+    img, warnings = layout(svc, json.loads(path.read_text()))
+    assert warnings == [] and img.size == (296, 128)
+    assert 0 in set(img.convert("L").tobytes())  # something was drawn
+
+
+def test_examples_exist():
+    assert {p.stem for p in EXAMPLES} >= {"dashboard", "alert", "agenda"}
+
+
+def test_flex_splits_leftover_space_by_weight(svc):
+    root = {"type": "row", "children": [
+        {"type": "rect", "w": 20, "fill": "black"},
+        {"type": "rect", "flex": 1, "fill": "black"},
+        {"type": "rect", "flex": 3, "fill": "white", "outline": "black"}]}
+    img, w = layout(svc, root)
+    assert w == []
+    # leftover 276 -> 69 and 207; the white box with the outline starts at x=20+69
+    g = img.convert("L")
+    assert g.getpixel((10, 64)) == 0 and g.getpixel((60, 64)) == 0
+    assert g.getpixel((89, 64)) == 0  # outline of third box
+    assert g.getpixel((150, 64)) == 255
+
+
+def test_fit_text_grows_to_fill_its_box(svc):
+    root = {"type": "column", "children": [{"type": "text", "text": "21", "size": "fit", "flex": 1}]}
+    img, w = layout(svc, root)
+    small = layout(svc, {"type": "column", "children": [{"type": "text", "text": "21", "size": 12, "flex": 1}]})[0]
+    assert w == [] and max(text_cols(img)) > max(text_cols(small)) * 2
+
+
+def test_truncation_and_overflow_warn(svc):
+    _, w = layout(svc, {"type": "column", "children": [
+        {"type": "text", "text": "this is far too long for one line in a narrow box " * 3, "size": 14, "w": 100}]})
+    assert any("truncated" in x for x in w)
+    _, w = layout(svc, {"type": "column", "children": [{"type": "rect", "h": 100}, {"type": "rect", "h": 100}]})
+    assert any("children need" in x for x in w)
+    _, w = layout(svc, {"type": "column", "children": [{"type": "rect", "h": 128}, {"type": "spacer", "flex": 1}]})
+    assert any("no room" in x for x in w)
+
+
+def test_wrapping_with_max_lines(svc):
+    _, w = layout(svc, {"type": "column", "children": [
+        {"type": "text", "text": "a few words that need two lines to fit in this box", "size": 12, "w": 120, "max_lines": 3}]})
+    assert w == []
+
+
+def test_justify_and_align(svc):
+    root = {"type": "row", "justify": "center", "align": "center", "children": [
+        {"type": "rect", "w": 40, "h": 20, "fill": "black"}]}
+    g = layout(svc, root)[0].convert("L")
+    assert g.getpixel((148, 64)) == 0 and g.getpixel((10, 64)) == 255 and g.getpixel((148, 10)) == 255
+
+
+def test_layout_validation(svc):
+    for bad in ({"type": "blob"}, "text", {"type": "column", "children": [{"type": "text"}, 5]}):
+        with pytest.raises(RenderError):
+            layout(svc, bad)
+    deep = {"type": "spacer"}
+    for _ in range(9):
+        deep = {"type": "column", "children": [deep]}
+    with pytest.raises(RenderError, match="deeper"):
+        layout(svc, deep)
+    wide = {"type": "row", "children": [{"type": "spacer"} for _ in range(121)]}
+    with pytest.raises(RenderError, match="more than"):
+        layout(svc, wide)
+
+
+def test_render_layout_tool_and_store(svc):
+    out = svc.render_layout("waveshare-2in9-v2", "main", json.loads(EXAMPLES[0].read_text()), "white", "")
+    assert out["warnings"] == [] and out["url"].endswith("/images/waveshare-2in9-v2/main.bmp")
+    again = svc.render_layout("waveshare-2in9-v2", "main", json.loads(EXAMPLES[0].read_text()), "white", "")
+    assert again["changed"] is False
+
+
+@pytest.mark.anyio
+async def test_mcp_tools_include_layout(svc):
+    tools = {t.name for t in (await build_server(svc).list_tools())}
+    assert "render_layout" in tools

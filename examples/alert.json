@@ -1,0 +1,25 @@
+{
+  "type": "column",
+  "fill": "black",
+  "padding": 8,
+  "gap": 4,
+  "children": [
+    {
+      "type": "text",
+      "text": "! GARAGE DOOR",
+      "size": "fit",
+      "bold": true,
+      "color": "white",
+      "flex": 1,
+      "align": "center",
+      "valign": "middle"
+    },
+    {
+      "type": "text",
+      "text": "Open for 45 minutes",
+      "size": 14,
+      "color": "white",
+      "align": "center"
+    }
+  ]
+}

@@ -29,12 +29,47 @@ Profile and label names are lowercase letters, digits, `-` and `_`.
 | Tool | What it does |
 |---|---|
 | `list_profiles` | Display profiles available |
+| `render_layout(profile, label, root, background?)` | **Preferred.** Nested `row`/`column` layout with flex sizing, padding, auto-fitting text and `warnings`. No pixel coordinates |
 | `render_card(profile, label, header, lines, footer?, invert_header?)` | Quick header/lines/footer layout, sized to the display |
-| `render_image(profile, label, elements, background?)` | Custom layout from `text`, `rect`, `line` and `progress` elements |
+| `render_image(profile, label, elements, background?)` | Exact pixel placement from `text`, `rect`, `line` and `progress` elements, for when you need coordinates |
 | `list_images(profile?)` | Stored images with URL, sha256 and last-changed time |
 | `delete_image(profile, label)` | Remove an image |
 
 Render tools return the image `url`, `sha256` and **`changed`**, which is `false` when the pixels are identical to what was already stored. A caller can use that to skip a needless e-paper refresh.
+
+## Layouts
+
+`render_layout` takes a tree. Containers split the space between their children, so you say how things relate (a title row, a big number filling the left, a list on the right) and the server does the measuring. A 296×128 display, for example:
+
+```json
+{"type": "column", "padding": 6, "gap": 4, "children": [
+  {"type": "row", "h": 22, "children": [
+    {"type": "text", "text": "TUESDAY", "size": 16, "bold": true, "flex": 1},
+    {"type": "text", "text": "14:05", "size": 16, "align": "right"}]},
+  {"type": "rect", "h": 2, "fill": "black"},
+  {"type": "row", "flex": 1, "gap": 8, "children": [
+    {"type": "text", "text": "21°", "size": "fit", "bold": true, "flex": 1, "align": "center", "valign": "middle"},
+    {"type": "column", "flex": 2, "gap": 3, "children": [
+      {"type": "text", "text": "Standup in 12 min", "size": 14},
+      {"type": "text", "text": "Front door open for 20 minutes", "size": 12, "max_lines": 2},
+      {"type": "progress", "h": 8, "value": 0.6}]}]},
+  {"type": "text", "text": "updated 14:05", "size": 10}]}
+```
+
+| Node | Properties |
+|---|---|
+| every node | `w`, `h` (px), `flex` (share of leftover space along the parent's direction) |
+| `column` / `row` | `children`, `gap`, `padding` (number, `[v, h]` or `[t, r, b, l]`), `align` (cross axis: `stretch` default, `start`, `center`, `end`), `justify` (main axis when nothing has `flex`: `start`, `center`, `end`, `space-between`), `fill`, `border`, `border_color` |
+| `text` | `text`, `size` (px, or `"fit"`), `bold`, `color`, `align`, `valign`, `max_lines`, `min_size`, `max_size`, `fit: "shrink"` |
+| `rect` | `fill`, `outline`: a bar or rule such as `{"type": "rect", "h": 2, "fill": "black"}` |
+| `progress` | `value` (0 to 1), `h` |
+| `spacer` | empty space; give it `flex` or `w`/`h` |
+
+`size: "fit"` picks the largest font size that fits the text's box, so give it `flex` or `w`/`h`. Text longer than its box is cut with an ellipsis; raise `max_lines` to wrap instead.
+
+**Warnings.** The result always includes `warnings`, such as truncated text, children that need more room than the container has, or elements that got no space or fall off the canvas. They name the offending node (`root.children[1].children[0]`), so a caller can correct the layout and render again to the same label. Layouts are limited to 8 levels and 120 nodes.
+
+Ready-made layouts are in [`examples/`](examples) (`dashboard`, `alert`, `agenda`) and are covered by the tests. They are written for a 296×128 display; the same trees adapt to other sizes because sizes are relative.
 
 ## HTTP
 

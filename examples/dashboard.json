@@ -1,0 +1,76 @@
+{
+  "type": "column",
+  "padding": 6,
+  "gap": 4,
+  "children": [
+    {
+      "type": "row",
+      "h": 22,
+      "gap": 6,
+      "children": [
+        {
+          "type": "text",
+          "text": "TUESDAY",
+          "size": 16,
+          "bold": true,
+          "flex": 1
+        },
+        {
+          "type": "text",
+          "text": "14:05",
+          "size": 16,
+          "align": "right"
+        }
+      ]
+    },
+    {
+      "type": "rect",
+      "h": 2,
+      "fill": "black"
+    },
+    {
+      "type": "row",
+      "flex": 1,
+      "gap": 8,
+      "children": [
+        {
+          "type": "text",
+          "text": "21°",
+          "size": "fit",
+          "bold": true,
+          "flex": 1,
+          "valign": "middle",
+          "align": "center"
+        },
+        {
+          "type": "column",
+          "flex": 2,
+          "gap": 3,
+          "children": [
+            {
+              "type": "text",
+              "text": "Standup in 12 min",
+              "size": 14
+            },
+            {
+              "type": "text",
+              "text": "Front door open for 20 minutes while nobody home",
+              "size": 12,
+              "max_lines": 2
+            },
+            {
+              "type": "progress",
+              "h": 8,
+              "value": 0.6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "updated 14:05",
+      "size": 10
+    }
+  ]
+}

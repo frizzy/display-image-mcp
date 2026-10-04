@@ -25,7 +25,8 @@ Each display type is a *profile* (resolution + colour depth). An image is identi
 (profile, label); rendering to an existing label overwrites it, so a display can keep fetching
 the same URL. This server does not know where images are shown or when to refresh: use the
 returned `url` and `changed` flag in whatever pushes the update to the display.
-Start with list_profiles. For a quick result use render_card; for custom layouts use render_image.
+Start with list_profiles. Use render_layout for most screens (rows/columns, auto-fitting text, warnings),
+render_card for a quick fixed layout, and render_image only when you need exact pixel placement.
 """
 
 
@@ -50,6 +51,18 @@ class Service:
             return self.profiles[name]
         except KeyError:
             raise ValueError(f"unknown profile {name!r}; available: {', '.join(sorted(self.profiles))}") from None
+
+    def render_layout(self, profile_name: str, label: str, root: dict, background: str,
+                      description: str) -> dict:
+        profile = self.profile(profile_name)
+        r = Renderer(profile, self.cfg.font)
+        try:
+            img, warnings = r.render_layout(root, background)
+        except RenderError as exc:
+            raise ValueError(str(exc)) from None
+        meta = self.store.save(profile.name, label, r.encode(img), profile.format, profile.width,
+                               profile.height, description)
+        return {**meta, "url": self.url(meta), "warnings": warnings}
 
     def url(self, meta: dict) -> str:
         base = (self.cfg.base_url or f"http://{self.cfg.host}:{self.cfg.port}").rstrip("/")
@@ -104,6 +117,32 @@ def build_server(svc: Service) -> MCPServer:
         Returns the image URL, sha256 and `changed` (see render_card).
         """
         return svc.render(profile, label, elements, background, description)
+
+    @mcp.tool()
+    def render_layout(profile: str, label: str, root: dict[str, Any], background: str = "white",
+                      description: str = "") -> dict:
+        """Lay out a screen from nested rows and columns (no pixel coordinates) and store it as (profile, label).
+
+        `root` fills the whole display. Containers split space between children; text can fit itself.
+        Always check `warnings` in the result: it reports truncated text, overflow and elements that got
+        no room, so you can fix the layout and render again (same label overwrites).
+
+        Nodes (every node accepts `w`, `h` in px and `flex` as a share of leftover space):
+          {"type":"column"|"row","children":[...],"gap":4,"padding":6,"align":"stretch|start|center|end",
+           "justify":"start|center|end|space-between","fill":colour,"border":px,"border_color":colour}
+              padding is a number, [vertical, horizontal] or [top, right, bottom, left].
+              align = cross axis (default stretch); justify = main axis when no child has flex.
+          {"type":"text","text":"..","size":12|"fit","bold":false,"color":"black","align":"left|center|right",
+           "valign":"top|middle|bottom","max_lines":1,"min_size":8,"max_size":96,"fit":"shrink"}
+              size "fit" (or fit "shrink") picks the largest size that fits the box: give it flex or w/h.
+              Text longer than its box is cut with an ellipsis (and warned): raise max_lines to wrap.
+          {"type":"rect","fill":colour,"outline":colour}       (a bar or rule: {"type":"rect","h":2,"fill":"black"})
+          {"type":"progress","value":0.0-1.0,"h":8}
+          {"type":"spacer"}                                    (give it flex or w/h)
+        Colours: black, white, red, yellow, gray, dark_gray, light_gray or #rrggbb (snapped to the profile).
+        Limits: 8 levels deep, 120 nodes.
+        """
+        return svc.render_layout(profile, label, root, background, description)
 
     @mcp.tool()
     def list_images(profile: str | None = None) -> list[dict]:

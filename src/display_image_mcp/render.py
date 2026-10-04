@@ -150,6 +150,17 @@ class Renderer:
             self.draw_element(draw, el)
         return self._finish(canvas)
 
+    def render_layout(self, root: dict, background: str = "white") -> tuple[Image.Image, list[str]]:
+        """Lay out a row/column tree over the whole canvas. Returns the image and layout warnings."""
+        from .layout import Layout  # layout imports this module
+
+        p = self.profile
+        canvas = Image.new("RGB", (p.width, p.height), self.color(background))
+        draw = ImageDraw.Draw(canvas)
+        draw.fontmode = "1" if p.color_mode in ("mono", "tricolor_red", "tricolor_yellow") else "L"
+        warnings = Layout(self, draw).run(root, p.width, p.height)
+        return self._finish(canvas), warnings
+
     def _finish(self, canvas: Image.Image) -> Image.Image:
         mode = self.profile.color_mode
         if mode == "rgb":

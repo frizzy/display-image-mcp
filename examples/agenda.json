@@ -1,0 +1,101 @@
+{
+  "type": "column",
+  "padding": [
+    4,
+    6
+  ],
+  "gap": 2,
+  "children": [
+    {
+      "type": "row",
+      "h": 18,
+      "children": [
+        {
+          "type": "text",
+          "text": "TODAY",
+          "size": 14,
+          "bold": true,
+          "flex": 1
+        },
+        {
+          "type": "text",
+          "text": "3 events",
+          "size": 12,
+          "align": "right",
+          "valign": "middle"
+        }
+      ]
+    },
+    {
+      "type": "rect",
+      "h": 1,
+      "fill": "black"
+    },
+    {
+      "type": "row",
+      "flex": 1,
+      "gap": 6,
+      "children": [
+        {
+          "type": "text",
+          "text": "09:30",
+          "size": 13,
+          "bold": true,
+          "w": 40,
+          "valign": "middle"
+        },
+        {
+          "type": "text",
+          "text": "Standup",
+          "size": 13,
+          "flex": 1,
+          "valign": "middle"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "flex": 1,
+      "gap": 6,
+      "children": [
+        {
+          "type": "text",
+          "text": "12:00",
+          "size": 13,
+          "bold": true,
+          "w": 40,
+          "valign": "middle"
+        },
+        {
+          "type": "text",
+          "text": "Lunch with Sam",
+          "size": 13,
+          "flex": 1,
+          "valign": "middle"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "flex": 1,
+      "gap": 6,
+      "children": [
+        {
+          "type": "text",
+          "text": "15:45",
+          "size": 13,
+          "bold": true,
+          "w": 40,
+          "valign": "middle"
+        },
+        {
+          "type": "text",
+          "text": "School pickup",
+          "size": 13,
+          "flex": 1,
+          "valign": "middle"
+        }
+      ]
+    }
+  ]
+}
