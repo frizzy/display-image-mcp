@@ -45,7 +45,7 @@ Render tools return the image `url`, `sha256` and **`changed`**, which is `false
 | `GET /images` | Digest for every profile that has images |
 | `GET /profiles` | Profile definitions |
 
-The HTTP host has **no authentication**. Run it on a trusted network and be careful what you render.
+The image host has **no authentication**, because displays like an ESP32 can't easily send headers. Run it on a trusted network and be careful what you render. The MCP endpoint can be protected with a bearer token (see below).
 
 ## Run
 
@@ -63,6 +63,7 @@ uv run display-image-mcp --transport streamable-http      # MCP at http://127.0.
 | `--base-url` | `DISPLAY_MCP_BASE_URL` | `http://<http-host>:<http-port>`. **Set this to the address your displays can reach**, as it is used in returned URLs |
 | `--font` | `DISPLAY_MCP_FONT` | Pillow's built-in vector font |
 | `--transport` | `DISPLAY_MCP_TRANSPORT` | `stdio` |
+| `--token` | `DISPLAY_MCP_TOKEN` | none. If set, the MCP endpoint requires `Authorization: Bearer <token>` (streamable-http only) |
 | `--mcp-host` / `--mcp-port` | `DISPLAY_MCP_MCP_HOST` / `_PORT` | `127.0.0.1` / `8767` |
 
 ## Run as a standalone service
@@ -86,7 +87,7 @@ display-image-mcp --transport streamable-http --mcp-host 0.0.0.0 \
 - MCP endpoint: `http://192.168.1.10:8767/mcp`
 - Image host: `http://192.168.1.10:8099`
 
-`--mcp-host 0.0.0.0` lets an agent on another machine connect. The MCP endpoint is **unauthenticated** too, so keep both ports on a trusted network (or leave `--mcp-host` at its `127.0.0.1` default if the agent runs on the same machine).
+`--mcp-host 0.0.0.0` lets an agent on another machine connect. Protect the MCP endpoint with a token: generate one with `openssl rand -hex 32` and pass it as `--token` or `DISPLAY_MCP_TOKEN`; clients then send `Authorization: Bearer <token>`. Without a token the server prints a warning when bound to a non-local address. Keep both ports on a trusted network either way, or leave `--mcp-host` at its `127.0.0.1` default if the agent runs on the same machine.
 
 ### Linux (systemd)
 
@@ -103,6 +104,7 @@ User=pi
 ExecStart=/home/pi/.local/bin/display-image-mcp --transport streamable-http --mcp-host 0.0.0.0
 Environment=DISPLAY_MCP_DATA=/home/pi/display-images
 Environment=DISPLAY_MCP_BASE_URL=http://192.168.1.10:8099
+Environment=DISPLAY_MCP_TOKEN=put-a-long-random-token-here
 # Environment=DISPLAY_MCP_PROFILES=/home/pi/display-profiles.toml
 Restart=on-failure
 RestartSec=5
@@ -134,6 +136,7 @@ journalctl -u display-image-mcp -f
   <key>EnvironmentVariables</key><dict>
     <key>DISPLAY_MCP_DATA</key><string>/Users/you/display-images</string>
     <key>DISPLAY_MCP_BASE_URL</key><string>http://192.168.1.10:8099</string>
+    <key>DISPLAY_MCP_TOKEN</key><string>put-a-long-random-token-here</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -166,14 +169,14 @@ docker compose pull && docker compose up -d                          # update
 | `8099` | Image host. Displays fetch from here | your network |
 | `8767` | MCP endpoint, `http://127.0.0.1:8767/mcp` | this machine only |
 
-The MCP endpoint is unauthenticated, so it is bound to localhost by default. To let an agent on another machine connect, change the mapping to `"8767:8767"` and keep it on a trusted network. To add your own profiles, mount a TOML file and set `DISPLAY_MCP_PROFILES` (there is a commented example in the compose file).
+The MCP endpoint is bound to localhost by default. To let an agent on another machine connect, set `DISPLAY_MCP_TOKEN` (in `.env` or the environment) and change the mapping to `"8767:8767"`. To add your own profiles, mount a TOML file and set `DISPLAY_MCP_PROFILES` (there is a commented example in the compose file).
 
 ### Plain `docker run`
 
 ```sh
 docker run -d --name display-image-mcp --restart unless-stopped \
   -p 8099:8099 -p 127.0.0.1:8767:8767 -v display-images:/data \
-  -e DISPLAY_MCP_BASE_URL=http://192.168.1.10:8099 \
+  -e DISPLAY_MCP_BASE_URL=http://192.168.1.10:8099 -e DISPLAY_MCP_TOKEN=<token> \
   ghcr.io/frizzy/display-image-mcp --transport streamable-http --mcp-host 0.0.0.0
 ```
 
@@ -181,7 +184,7 @@ Without `--transport` the container speaks MCP over stdio (`docker run -i --rm .
 
 ### Connecting an agent
 
-Point any MCP client that supports streamable HTTP at the URL, e.g. `http://192.168.1.10:8767/mcp`. Check your client's docs for how it takes a remote server URL. If a client can only launch local stdio servers, you can still use `display-image-mcp` (no flags) as its command, but then that client owns the process lifecycle, which is what this setup avoids.
+Point any MCP client that supports streamable HTTP at the URL, e.g. `http://192.168.1.10:8767/mcp`, with the header `Authorization: Bearer <token>` if you set a token. Check your client's docs for how it takes a remote server URL and headers. If a client can only launch local stdio servers, you can still use `display-image-mcp` (no flags) as its command, but then that client owns the process lifecycle, which is what this setup avoids.
 
 ## Example: ESPHome e-paper
 
