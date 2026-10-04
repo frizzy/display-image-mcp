@@ -1,0 +1,33 @@
+# Always-on server: MCP over streamable HTTP plus the image host.
+#   DISPLAY_MCP_BASE_URL=http://192.168.1.10:8099 docker compose up -d
+# (or put that line in a .env file next to this one)
+services:
+  display-image-mcp:
+    image: ghcr.io/frizzy/display-image-mcp:latest
+    build: .
+    restart: unless-stopped
+    command: ["--transport", "streamable-http", "--mcp-host", "0.0.0.0"]
+    environment:
+      # The address your displays use to reach the image host; it ends up in the returned URLs.
+      DISPLAY_MCP_BASE_URL: ${DISPLAY_MCP_BASE_URL:?set DISPLAY_MCP_BASE_URL, e.g. http://192.168.1.10:8099}
+      # Optional extra profiles: mount the file below and uncomment.
+      # DISPLAY_MCP_PROFILES: /config/profiles.toml
+    volumes:
+      - display-images:/data
+      # - ./profiles.toml:/config/profiles.toml:ro
+    ports:
+      # Displays fetch images from here, so this is open to your network.
+      - "8099:8099"
+      # The MCP endpoint is unauthenticated: this machine only. Use "8767:8767" to open it up.
+      - "127.0.0.1:8767:8767"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  display-images:

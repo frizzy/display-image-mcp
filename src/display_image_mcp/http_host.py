@@ -36,6 +36,9 @@ def build_app(store: ImageStore, profiles: dict[str, Profile], base_url: str | N
             "image": f"{root(request)}/images/{{profile}}/{{label}}.{{format}}",
         })
 
+    async def healthz(request: Request) -> Response:
+        return Response("ok", media_type="text/plain")
+
     async def list_profiles(request: Request) -> Response:
         return JSONResponse([p.to_dict() for p in profiles.values()])
 
@@ -68,6 +71,7 @@ def build_app(store: ImageStore, profiles: dict[str, Profile], base_url: str | N
 
     return Starlette(routes=[
         Route("/", index),
+        Route("/healthz", healthz),
         Route("/profiles", list_profiles),
         Route("/images", all_digests),
         Route("/images/{profile}", one_digest),

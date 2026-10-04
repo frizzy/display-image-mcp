@@ -132,7 +132,7 @@ def parse_args(argv: list[str] | None = None) -> tuple[Config, argparse.Namespac
     ap.add_argument("--font", default=env("DISPLAY_MCP_FONT"), help="path to a .ttf font (default: Pillow's built-in)")
     ap.add_argument("--transport", choices=["stdio", "streamable-http"], default=env("DISPLAY_MCP_TRANSPORT", "stdio"))
     ap.add_argument("--mcp-host", default=env("DISPLAY_MCP_MCP_HOST", "127.0.0.1"), help="MCP bind (streamable-http)")
-    ap.add_argument("--mcp-port", type=int, default=int(env("DISPLAY_MCP_MCP_PORT", "8765")))
+    ap.add_argument("--mcp-port", type=int, default=int(env("DISPLAY_MCP_MCP_PORT", "8767")))
     a = ap.parse_args(argv)
     cfg = Config(Path(a.data_dir), Path(a.profiles) if a.profiles else None, a.http_host, a.http_port,
                  a.base_url, a.font)

@@ -101,6 +101,7 @@ def test_http_host(svc):
     assert list(c.get("/images").json()) == ["ssd1306-128x64"]
     assert c.get("/images/ssd1306-128x64/missing").status_code == 404
     assert c.get("/images/nope").status_code == 404
+    assert c.get("/healthz").text == "ok"
     assert c.get("/images/ssd1306-128x64/..%2Fx").status_code == 404
 
 

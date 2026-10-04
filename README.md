@@ -52,7 +52,7 @@ The HTTP host has **no authentication**. Run it on a trusted network and be care
 ```sh
 uv sync
 uv run display-image-mcp                                  # MCP over stdio + image host on :8099
-uv run display-image-mcp --transport streamable-http      # MCP at http://127.0.0.1:8765/mcp
+uv run display-image-mcp --transport streamable-http      # MCP at http://127.0.0.1:8767/mcp
 ```
 
 | Option | Env | Default |
@@ -63,7 +63,7 @@ uv run display-image-mcp --transport streamable-http      # MCP at http://127.0.
 | `--base-url` | `DISPLAY_MCP_BASE_URL` | `http://<http-host>:<http-port>`. **Set this to the address your displays can reach**, as it is used in returned URLs |
 | `--font` | `DISPLAY_MCP_FONT` | Pillow's built-in vector font |
 | `--transport` | `DISPLAY_MCP_TRANSPORT` | `stdio` |
-| `--mcp-host` / `--mcp-port` | `DISPLAY_MCP_MCP_HOST` / `_PORT` | `127.0.0.1` / `8765` |
+| `--mcp-host` / `--mcp-port` | `DISPLAY_MCP_MCP_HOST` / `_PORT` | `127.0.0.1` / `8767` |
 
 ## Run as a standalone service
 
@@ -83,7 +83,7 @@ display-image-mcp --transport streamable-http --mcp-host 0.0.0.0 \
   --data-dir ~/display-images --base-url http://192.168.1.10:8099
 ```
 
-- MCP endpoint: `http://192.168.1.10:8765/mcp`
+- MCP endpoint: `http://192.168.1.10:8767/mcp`
 - Image host: `http://192.168.1.10:8099`
 
 `--mcp-host 0.0.0.0` lets an agent on another machine connect. The MCP endpoint is **unauthenticated** too, so keep both ports on a trusted network (or leave `--mcp-host` at its `127.0.0.1` default if the agent runs on the same machine).
@@ -147,9 +147,41 @@ launchctl load ~/Library/LaunchAgents/com.example.display-image-mcp.plist
 
 The unit files above follow standard systemd and launchd usage. I have not run them myself: only the `uv tool install` command and the LAN-bound streamable-http endpoint were tested.
 
+## Running with Docker
+
+A multi-arch image (amd64 and arm64, so a Raspberry Pi works too) is published to GitHub Container Registry as `ghcr.io/frizzy/display-image-mcp`, built by CI from `main` (`:latest`) and from `v*` tags (`:X.Y.Z`, `:X.Y`). To build it yourself, run `docker build -t display-image-mcp .` in a checkout and use that name instead.
+
+### Always on, with Docker Compose
+
+[`docker-compose.yml`](docker-compose.yml) runs the streamable-HTTP server with a restart policy, a health check, a read-only filesystem, no capabilities and a volume for the images:
+
+```sh
+DISPLAY_MCP_BASE_URL=http://192.168.1.10:8099 docker compose up -d   # or put that line in a .env file
+docker compose logs -f
+docker compose pull && docker compose up -d                          # update
+```
+
+| Port | What | Published to |
+|---|---|---|
+| `8099` | Image host. Displays fetch from here | your network |
+| `8767` | MCP endpoint, `http://127.0.0.1:8767/mcp` | this machine only |
+
+The MCP endpoint is unauthenticated, so it is bound to localhost by default. To let an agent on another machine connect, change the mapping to `"8767:8767"` and keep it on a trusted network. To add your own profiles, mount a TOML file and set `DISPLAY_MCP_PROFILES` (there is a commented example in the compose file).
+
+### Plain `docker run`
+
+```sh
+docker run -d --name display-image-mcp --restart unless-stopped \
+  -p 8099:8099 -p 127.0.0.1:8767:8767 -v display-images:/data \
+  -e DISPLAY_MCP_BASE_URL=http://192.168.1.10:8099 \
+  ghcr.io/frizzy/display-image-mcp --transport streamable-http --mcp-host 0.0.0.0
+```
+
+Without `--transport` the container speaks MCP over stdio (`docker run -i --rm ...`), but then whatever launches it owns its lifecycle.
+
 ### Connecting an agent
 
-Point any MCP client that supports streamable HTTP at the URL, e.g. `http://192.168.1.10:8765/mcp`. Check your client's docs for how it takes a remote server URL. If a client can only launch local stdio servers, you can still use `display-image-mcp` (no flags) as its command, but then that client owns the process lifecycle, which is what this setup avoids.
+Point any MCP client that supports streamable HTTP at the URL, e.g. `http://192.168.1.10:8767/mcp`. Check your client's docs for how it takes a remote server URL. If a client can only launch local stdio servers, you can still use `display-image-mcp` (no flags) as its command, but then that client owns the process lifecycle, which is what this setup avoids.
 
 ## Example: ESPHome e-paper
 
