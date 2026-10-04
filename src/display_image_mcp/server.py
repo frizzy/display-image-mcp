@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import os
 import sys
 import threading
@@ -130,6 +131,8 @@ def parse_args(argv: list[str] | None = None) -> tuple[Config, argparse.Namespac
                     help="externally reachable URL of the image host, used in returned links "
                          "(default http://<http-host>:<http-port>)")
     ap.add_argument("--font", default=env("DISPLAY_MCP_FONT"), help="path to a .ttf font (default: Pillow's built-in)")
+    ap.add_argument("--token", default=env("DISPLAY_MCP_TOKEN"),
+                    help="require 'Authorization: Bearer <token>' on the MCP endpoint (streamable-http only)")
     ap.add_argument("--transport", choices=["stdio", "streamable-http"], default=env("DISPLAY_MCP_TRANSPORT", "stdio"))
     ap.add_argument("--mcp-host", default=env("DISPLAY_MCP_MCP_HOST", "127.0.0.1"), help="MCP bind (streamable-http)")
     ap.add_argument("--mcp-port", type=int, default=int(env("DISPLAY_MCP_MCP_PORT", "8767")))
@@ -137,6 +140,25 @@ def parse_args(argv: list[str] | None = None) -> tuple[Config, argparse.Namespac
     cfg = Config(Path(a.data_dir), Path(a.profiles) if a.profiles else None, a.http_host, a.http_port,
                  a.base_url, a.font)
     return cfg, a
+
+
+class BearerAuth:
+    """ASGI middleware: reject HTTP requests without the right bearer token."""
+
+    def __init__(self, app, token: str):
+        self.app = app
+        self.token = token.encode()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            auth = dict(scope["headers"]).get(b"authorization", b"")
+            scheme, _, supplied = auth.partition(b" ")
+            if scheme.lower() != b"bearer" or not hmac.compare_digest(supplied.strip(), self.token):
+                await send({"type": "http.response.start", "status": 401,
+                            "headers": [(b"content-type", b"text/plain"), (b"www-authenticate", b"Bearer")]})
+                await send({"type": "http.response.body", "body": b"unauthorized"})
+                return
+        await self.app(scope, receive, send)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -149,9 +171,16 @@ def main(argv: list[str] | None = None) -> None:
     print(f"image host on http://{cfg.host}:{cfg.port}", file=sys.stderr)
     mcp = build_server(svc)
     if args.transport == "stdio":
+        if args.token:
+            print("--token only applies to --transport streamable-http; ignoring", file=sys.stderr)
         mcp.run("stdio")
     else:
-        mcp.run("streamable-http", host=args.mcp_host, port=args.mcp_port)
+        app = mcp.streamable_http_app(host=args.mcp_host)
+        if args.token:
+            app = BearerAuth(app, args.token)
+        elif args.mcp_host not in ("127.0.0.1", "localhost", "::1"):
+            print("WARNING: MCP endpoint is open to the network without --token", file=sys.stderr)
+        uvicorn.run(app, host=args.mcp_host, port=args.mcp_port, log_level="warning")
 
 
 if __name__ == "__main__":

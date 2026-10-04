@@ -118,3 +118,17 @@ def test_custom_profiles_file(tmp_path):
 async def test_mcp_tools_registered(svc):
     tools = {t.name for t in (await build_server(svc).list_tools())}
     assert tools == {"list_profiles", "render_card", "render_image", "list_images", "delete_image"}
+
+
+def test_bearer_auth(svc):
+    from display_image_mcp.server import BearerAuth
+
+    async def ok(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"hi"})
+
+    c = TestClient(BearerAuth(ok, "s3cret"))
+    assert c.get("/").status_code == 401
+    assert c.get("/", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert c.get("/", headers={"Authorization": "Basic s3cret"}).status_code == 401
+    assert c.get("/", headers={"Authorization": "Bearer s3cret"}).text == "hi"
