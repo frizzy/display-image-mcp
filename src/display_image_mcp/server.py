@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import hmac
 import os
 import sys
@@ -13,6 +14,7 @@ from typing import Any
 
 import uvicorn
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from .http_host import build_app
 from .profiles import Profile, load_profiles
@@ -81,15 +83,32 @@ class Service:
         return {**meta, "url": self.url(meta)}
 
 
+def reports_errors(fn):
+    """Turn input problems (ValueError, RenderError) into ToolError.
+
+    The SDK only shows the caller the message of a ToolError; any other exception reaches the model as
+    a bare "Error executing tool", which gives it nothing to correct.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ValueError as exc:
+            raise ToolError(str(exc)) from None
+    return wrapper
+
+
 def build_server(svc: Service) -> MCPServer:
     mcp = MCPServer("display-image-mcp", instructions=INSTRUCTIONS)
 
     @mcp.tool()
+    @reports_errors
     def list_profiles() -> list[dict]:
         """List display profiles (resolution, colour mode, output format)."""
         return [p.to_dict() for p in svc.profiles.values()]
 
     @mcp.tool()
+    @reports_errors
     def render_card(profile: str, label: str, header: str, lines: list[str], footer: str = "",
                     invert_header: bool = True, description: str = "") -> dict:
         """Render a simple card (header bar, body lines, footer) and store it as (profile, label).
@@ -103,6 +122,7 @@ def build_server(svc: Service) -> MCPServer:
                           "white", description)
 
     @mcp.tool()
+    @reports_errors
     def render_image(profile: str, label: str, elements: list[dict[str, Any]], background: str = "white",
                      description: str = "") -> dict:
         """Render a custom layout from drawing elements and store it as (profile, label).
@@ -119,6 +139,7 @@ def build_server(svc: Service) -> MCPServer:
         return svc.render(profile, label, elements, background, description)
 
     @mcp.tool()
+    @reports_errors
     def render_layout(profile: str, label: str, root: dict[str, Any], background: str = "white",
                       description: str = "") -> dict:
         """Lay out a screen from nested rows and columns (no pixel coordinates) and store it as (profile, label).
@@ -145,12 +166,14 @@ def build_server(svc: Service) -> MCPServer:
         return svc.render_layout(profile, label, root, background, description)
 
     @mcp.tool()
+    @reports_errors
     def list_images(profile: str | None = None) -> list[dict]:
         """List stored images (all profiles, or one) with URL, sha256, size and last-changed time."""
         names = [svc.profile(profile).name] if profile else list(svc.profiles)
         return [{**m, "url": svc.url(m)} for n in names for m in svc.store.list(n)]
 
     @mcp.tool()
+    @reports_errors
     def delete_image(profile: str, label: str) -> dict:
         """Delete the image stored for (profile, label)."""
         svc.profile(profile)

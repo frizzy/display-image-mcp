@@ -57,8 +57,15 @@ class Layout:
             raise RenderError(f"layout has more than {MAX_NODES} elements")
         kind = node.get("type")
         if kind in CONTAINERS:
-            for i, child in enumerate(node.get("children", [])):
+            children = node.get("children", [])
+            if not isinstance(children, list):
+                raise RenderError(f'{path}: "children" must be a list of nodes')
+            for i, child in enumerate(children):
                 self._validate(child, f"{path}.children[{i}]", depth + 1)
+        elif kind is None:
+            keys = ", ".join(sorted(map(str, node))) or "no keys"
+            raise RenderError(f'{path}: every node needs a "type" (row, column, text, rect, progress or spacer); '
+                              f"this one has: {keys}")
         elif kind not in LEAVES:
             raise RenderError(f"{path}: unknown type {kind!r} (row, column, text, rect, progress, spacer)")
 

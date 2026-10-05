@@ -232,3 +232,35 @@ def test_render_layout_tool_and_store(svc):
 async def test_mcp_tools_include_layout(svc):
     tools = {t.name for t in (await build_server(svc).list_tools())}
     assert "render_layout" in tools
+
+
+# -- errors reach the caller -------------------------------------------------------------
+
+from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402
+
+
+@pytest.mark.anyio
+async def test_input_errors_are_readable_tool_errors(svc):
+    srv = build_server(svc)
+    bad = {"type": "column", "children": [{"type": "row", "children": [{"text": "hi", "size": 12}]}]}
+    with pytest.raises(ToolError, match=r'root\.children\[0\]\.children\[0\]: every node needs a "type".*size, text') as e:
+        await srv.call_tool("render_layout", {"profile": "waveshare-2in9-v2", "label": "main", "root": bad})
+    assert not type(e.value).__name__.startswith("Unexpected")
+    with pytest.raises(ToolError, match="unknown profile 'nope'; available: .*waveshare-2in9-v2"):
+        await srv.call_tool("render_card", {"profile": "nope", "label": "x", "header": "h", "lines": []})
+    with pytest.raises(ToolError, match="invalid label"):
+        await srv.call_tool("render_image", {"profile": "waveshare-2in9-v2", "label": "../x", "elements": []})
+    with pytest.raises(ToolError, match="unknown colour"):
+        await srv.call_tool("render_image", {"profile": "waveshare-2in9-v2", "label": "x",
+                                             "elements": [{"type": "line", "x1": 0, "y1": 0, "x2": 1, "y2": 1,
+                                                           "color": "mauve"}]})
+    with pytest.raises(ToolError, match='"children" must be a list'):
+        await srv.call_tool("render_layout", {"profile": "waveshare-2in9-v2", "label": "x",
+                                              "root": {"type": "row", "children": "nope"}})
+
+
+@pytest.mark.anyio
+async def test_good_call_still_works_through_the_decorator(svc):
+    res = await build_server(svc).call_tool("render_layout", {
+        "profile": "waveshare-2in9-v2", "label": "main", "root": json.loads(EXAMPLES[0].read_text())})
+    assert not res.is_error and json.loads(res.content[0].text)["warnings"] == []
